@@ -1,0 +1,83 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aria-postgres
+    environment:
+      POSTGRES_DB: aria
+      POSTGRES_USER: aria_admin
+      POSTGRES_PASSWORD: aria_dev_password
+    ports:
+      # Exposed on 5433 for direct admin access (migrations, psql)
+      # Application traffic goes through PgBouncer on 6432
+      - '5433:5432'
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ 'CMD-SHELL', 'pg_isready -U aria_admin -d aria' ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: aria-pgbouncer
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Upstream PostgreSQL connection
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_USERNAME: aria_admin
+      POSTGRESQL_PASSWORD: aria_dev_password
+      POSTGRESQL_DATABASE: aria
+
+      # PgBouncer configuration
+      PGBOUNCER_POOL_MODE: transaction
+      PGBOUNCER_DEFAULT_POOL_SIZE: 20
+      PGBOUNCER_MAX_CLIENT_CONN: 100
+      PGBOUNCER_MAX_DB_CONNECTIONS: 40
+      PGBOUNCER_SERVER_IDLE_TIMEOUT: 30
+      PGBOUNCER_IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
+    ports:
+      - '6432:6432'
+    healthcheck:
+      test: [ 'CMD', 'pg_isready', '-h', 'localhost', '-p', '6432', '-U', 'aria_admin' ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-queue:
+    image: redis:7-alpine
+    container_name: aria-redis-queue
+    command: redis-server --maxmemory 256mb --maxmemory-policy noeviction
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_queue_data:/data
+    healthcheck:
+      test: [ 'CMD', 'redis-cli', 'ping' ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: aria-redis-cache
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --port 6380
+    ports:
+      - '6380:6380'
+    volumes:
+      - redis_cache_data:/data
+    healthcheck:
+      test: [ 'CMD', 'redis-cli', '-p', '6380', 'ping' ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_data:
+  redis_queue_data:
+  redis_cache_data:

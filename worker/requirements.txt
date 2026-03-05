@@ -1,0 +1,11 @@
+celery[redis]>=5.4.0
+redis>=5.2.0
+psycopg2-binary>=2.9.10
+boto3>=1.35.0
+numpy>=2.1.0
+pandas>=2.2.0
+scipy>=1.14.0
+python-evtx>=0.8.0
+dpkt>=1.9.8
+pydantic>=2.10.0
+structlog>=24.4.0
