@@ -1,3 +1,4 @@
+// @ts-ignore: IDE fails to resolve module under moduleResolution: "node" but it works in TSX at runtime.
 import { MigrationBuilder } from 'node-pg-migrate';
 
 export async function up(pgm: MigrationBuilder): Promise<void> {

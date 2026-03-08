@@ -18,7 +18,9 @@ from dataclasses import asdict
 from pathlib import Path
 
 import psycopg2
+from psycopg2.pool import ThreadedConnectionPool
 import boto3
+from celery.signals import worker_process_init, worker_process_shutdown
 
 from .celery_app import app
 from .config import config
@@ -27,7 +29,25 @@ from .engine import HABDEngine
 
 logger = logging.getLogger(__name__)
 
+db_pool: ThreadedConnectionPool | None = None
 
+
+@worker_process_init.connect
+def init_worker_db_pool(**kwargs):
+    """Initialize a persistent connection pool when the Celery worker process boots."""
+    global db_pool
+    logger.info("Initializing PostgreSQL ThreadedConnectionPool for worker process")
+    db_pool = ThreadedConnectionPool(1, 10, dsn=config.DATABASE_URL)
+
+
+@worker_process_shutdown.connect
+def shutdown_worker_db_pool(**kwargs):
+    """Close the connection pool cleanly when the worker shuts down."""
+    global db_pool
+    if db_pool:
+        logger.info("Closing PostgreSQL ThreadedConnectionPool")
+        db_pool.closeall()
+        db_pool = None
 def _create_s3_client():
     """Create a reusable S3/MinIO client."""
     return boto3.client(
@@ -109,7 +129,12 @@ def habd_analysis(self, payload: dict) -> dict:
     temp_files: list[Path] = []
 
     try:
-        conn = psycopg2.connect(config.DATABASE_URL)
+        if db_pool is None:
+            # Fallback for dev/testing if signals didn't fire
+            conn = psycopg2.connect(config.DATABASE_URL)
+        else:
+            conn = db_pool.getconn()
+            
         conn.autocommit = False
 
         # 1. Mark job as running
@@ -261,4 +286,8 @@ def habd_analysis(self, payload: dict) -> dict:
                 logger.warning(f"Failed to clean up {temp_path}: {e}")
 
         if conn:
-            conn.close()
+            if db_pool is not None:
+                # Return connection to the shared pool
+                db_pool.putconn(conn)
+            else:
+                conn.close()

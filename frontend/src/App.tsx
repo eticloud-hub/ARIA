@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
 import { useUiStore } from './stores/uiStore';
+import { tryRestoreSession } from './lib/authApi';
 import { Sidebar } from './components/organisms/Sidebar';
 import { Header } from './components/organisms/Header';
 import { LoginScreen } from './screens/LoginScreen';
@@ -75,6 +76,23 @@ const ToastContainer: React.FC = () => {
 };
 
 const App: React.FC = () => {
+    const [isRestoring, setIsRestoring] = useState(true);
+
+    useEffect(() => {
+        tryRestoreSession().finally(() => setIsRestoring(false));
+    }, []);
+
+    if (isRestoring) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <div className="animate-pulse flex flex-col items-center">
+                    <div className="w-12 h-12 border-4 border-slate-300 border-t-emerald-600 rounded-full animate-spin"></div>
+                    <p className="mt-4 text-slate-500 font-medium">Restoring session...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <QueryClientProvider client={queryClient}>
             <BrowserRouter>

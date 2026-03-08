@@ -34,7 +34,7 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-eval'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
             imgSrc: ["'self'", 'data:', 'blob:'],
             connectSrc: ["'self'"],
@@ -46,9 +46,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-    origin: config.NODE_ENV === 'production'
-        ? 'https://aria.yourcompany.com'
-        : 'http://localhost:5173',
+    origin: config.FRONTEND_URL,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

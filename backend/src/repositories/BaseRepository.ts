@@ -4,6 +4,20 @@ import { createModuleLogger } from '../utils/logger';
 
 const log = createModuleLogger('repo');
 
+const VALID_TABLES = new Set([
+    'organisations',
+    'users',
+    'cases',
+    'artifacts',
+    'analysis_jobs',
+    'analysis_results',
+    'reports',
+    'report_annotations',
+    'audit_events',
+    'pending_jobs',
+    'refresh_tokens'
+]);
+
 /**
  * BaseRepository — Abstract base for all data-access repositories.
  *
@@ -86,6 +100,10 @@ export abstract class BaseRepository {
         organisationId: string,
         softDelete = true
     ): Promise<T | null> {
+        if (!VALID_TABLES.has(table)) {
+            throw new Error(`Invalid table name requested: ${table}`);
+        }
+
         const softDeleteClause = softDelete ? ' AND deleted_at IS NULL' : '';
         const { rows } = await this.query<T>(
             `SELECT * FROM ${table} WHERE id = $1 AND organisation_id = $2${softDeleteClause}`,

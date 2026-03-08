@@ -5,9 +5,10 @@ services:
     image: postgres:16-alpine
     container_name: aria-postgres
     environment:
-      POSTGRES_DB: aria
-      POSTGRES_USER: aria_admin
-      POSTGRES_PASSWORD: aria_dev_password
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       # Exposed on 5433 for direct admin access (migrations, psql)
       # Application traffic goes through PgBouncer on 6432
@@ -15,7 +16,7 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ 'CMD-SHELL', 'pg_isready -U aria_admin -d aria' ]
+      test: [ 'CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}' ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -28,23 +29,24 @@ services:
         condition: service_healthy
     environment:
       # Upstream PostgreSQL connection
-      POSTGRESQL_HOST: postgres
-      POSTGRESQL_PORT: 5432
-      POSTGRESQL_USERNAME: aria_admin
-      POSTGRESQL_PASSWORD: aria_dev_password
-      POSTGRESQL_DATABASE: aria
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
 
       # PgBouncer configuration
-      PGBOUNCER_POOL_MODE: transaction
-      PGBOUNCER_DEFAULT_POOL_SIZE: 20
-      PGBOUNCER_MAX_CLIENT_CONN: 100
-      PGBOUNCER_MAX_DB_CONNECTIONS: 40
-      PGBOUNCER_SERVER_IDLE_TIMEOUT: 30
-      PGBOUNCER_IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
+      LISTEN_PORT: 6432
+      POOL_MODE: transaction
+      DEFAULT_POOL_SIZE: 20
+      MAX_CLIENT_CONN: 100
+      MAX_DB_CONNECTIONS: 40
+      SERVER_IDLE_TIMEOUT: 30
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
     ports:
       - '6432:6432'
     healthcheck:
-      test: [ 'CMD', 'pg_isready', '-h', 'localhost', '-p', '6432', '-U', 'aria_admin' ]
+      test: [ 'CMD', 'pg_isready', '-h', 'localhost', '-p', '6432', '-U', '${POSTGRES_USER}' ]
       interval: 5s
       timeout: 5s
       retries: 5

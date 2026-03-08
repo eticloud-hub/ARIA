@@ -2,8 +2,16 @@ import { Request, Response, NextFunction } from 'express';
 import { Redis } from 'ioredis';
 import { getConfig } from '../config';
 import { RateLimitError } from '../shared/errors';
+import { createModuleLogger } from '../utils/logger';
+
+const log = createModuleLogger('rateLimiter');
 
 let cacheRedis: Redis | null = null;
+
+// Basic in-memory fallback to prevent 500s when Redis is down
+const fallbackHits = new Map<string, number[]>();
+// Prevent memory leaks in fallback map (clear every minute)
+setInterval(() => fallbackHits.clear(), 60 * 1000).unref();
 
 function getCacheRedis(): Redis {
     if (!cacheRedis) {
@@ -88,17 +96,37 @@ export function rateLimiter(options: {
         const currentKey = `rl:${options.keyPrefix}:${identifier}:${currentWindow}`;
         const previousKey = `rl:${options.keyPrefix}:${identifier}:${previousWindow}`;
 
-        const result = await redis.eval(
-            SLIDING_WINDOW_SCRIPT,
-            2,
-            currentKey,
-            previousKey,
-            options.max,
-            options.windowMs,
-            now
-        ) as [number, number, number];
+        let allowed: number;
+        let count: number;
+        let limit: number;
 
-        const [allowed, count, limit] = result;
+        try {
+            const result = await redis.eval(
+                SLIDING_WINDOW_SCRIPT,
+                2,
+                currentKey,
+                previousKey,
+                options.max,
+                options.windowMs,
+                now
+            ) as [number, number, number];
+            [allowed, count, limit] = result;
+        } catch (err) {
+            log.error({ err, identifier }, 'Redis rate limiter failed! Circuit broken, falling back to in-memory limiter.');
+
+            // In-memory sliding logic fallback
+            const windowStart = now - options.windowMs;
+            const fallbackKey = `fallback:${options.keyPrefix}:${identifier}`;
+            let hits = fallbackHits.get(fallbackKey) || [];
+            hits = hits.filter(timestamp => timestamp > windowStart);
+            hits.push(now);
+            fallbackHits.set(fallbackKey, hits);
+
+            limit = options.max;
+            count = hits.length;
+            allowed = count > limit ? 0 : 1;
+        }
+
         const windowSeconds = Math.ceil(options.windowMs / 1000);
 
         // Set standard rate limit headers

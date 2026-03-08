@@ -3,10 +3,10 @@ import { z } from 'zod';
 const envSchema = z.object({
     NODE_ENV: z.enum(['development', 'staging', 'production']).default('development'),
     PORT: z.coerce.number().default(3001),
+    FRONTEND_URL: z.string().url().default('http://localhost:5173'),
 
-    // Database — application traffic routes through PgBouncer (port 6432)
-    DATABASE_URL: z.string().default('postgresql://aria_admin:aria_dev_password@localhost:6432/aria'),
-    // Direct PG connection for migrations and admin (bypasses PgBouncer)
+    // Database — direct PG connection for local development
+    DATABASE_URL: z.string().default('postgresql://aria_admin:aria_dev_password@localhost:5433/aria'),
     DIRECT_DATABASE_URL: z.string().default('postgresql://aria_admin:aria_dev_password@localhost:5433/aria'),
 
     // Redis

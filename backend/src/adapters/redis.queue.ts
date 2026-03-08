@@ -55,9 +55,12 @@ export class RedisQueueAdapter implements QueuePort {
         status: 'waiting' | 'active' | 'completed' | 'failed';
         progress?: number;
     } | null> {
-        const job =
-            (await this.analysisQueue.getJob(jobId)) ||
-            (await this.pdfQueue.getJob(jobId));
+        const [analysisJob, pdfJob] = await Promise.all([
+            this.analysisQueue.getJob(jobId),
+            this.pdfQueue.getJob(jobId)
+        ]);
+
+        const job = analysisJob || pdfJob;
 
         if (!job) return null;
 

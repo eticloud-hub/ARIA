@@ -1,4 +1,6 @@
-import runner from 'node-pg-migrate';
+// Use native require to bypass TSX esModuleInterop bugs with node-pg-migrate
+const nodePgMigrate = require('node-pg-migrate');
+const runner = nodePgMigrate.default || nodePgMigrate.runner || nodePgMigrate;
 import { Client } from 'pg';
 import path from 'path';
 import { getConfig } from '../config';
