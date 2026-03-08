@@ -3,79 +3,25 @@ import jwt from 'jsonwebtoken';
 import { getConfig } from '../config';
 import { AuthenticationError, TokenExpiredError } from '../shared/errors';
 import type { JwtPayload, RequestContext } from '../shared/types';
+import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
-import type { AuthRepository } from '../modules/auth/auth.repository';
+import type { AdminRepository } from '../modules/admin/admin.repository';
 import { createModuleLogger } from '../utils/logger';
-import { getCachedTokenVersion, cacheTokenVersion } from './tokenVersionCache';
-
-// Extend Express Request with our context
-declare global {
-    namespace Express {
-        interface Request {
-            ctx: RequestContext;
-            requestId: string;
-        }
-    }
-}
 
 const log = createModuleLogger('auth');
 
-/**
- * Auth Middleware — the return type of createAuthMiddleware.
- * Both functions are created with the same injected AuthRepository.
- */
 export interface AuthMiddleware {
     authenticate: (req: Request, res: Response, next: NextFunction) => Promise<void>;
-    optionalAuth: (req: Request, res: Response, next: NextFunction) => void;
+    optionalAuth: (req: Request, res: Response, next: NextFunction) => Promise<void>;
 }
 
 /**
- * Factory function — creates auth middleware with an injected AuthRepository.
- *
- * Why a factory:
- *   - The old code did `const authRepo = new AuthRepository()` at module level,
- *     bypassing the DI container and making the middleware untestable.
- *   - Now the AuthRepository is injected from the composition root (container.ts),
- *     and tests can pass a mock repository directly.
- *
- * Usage:
- *   const { authenticate, optionalAuth } = createAuthMiddleware(authRepository);
+ * Factory function — creates auth middleware with an injected AdminRepository.
+ * Validates Supabase JWTs locally using the symmetric JWT secret, then looks up 
+ * user role and RBAC context from the local database.
  */
-export function createAuthMiddleware(authRepo: AuthRepository): AuthMiddleware {
+export function createAuthMiddleware(adminRepo: AdminRepository): AuthMiddleware {
 
-    /**
-     * Get token_version via cache-aside pattern:
-     *   1. Check Redis cache (sub-ms)
-     *   2. On miss → fetch from PG via injected repo
-     *   3. Populate cache for next request
-     *
-     * Throws on ALL errors — caller must handle (fail closed).
-     */
-    async function getTokenVersion(userId: string): Promise<number> {
-        const cached = await getCachedTokenVersion(userId);
-        if (cached !== null) {
-            return cached;
-        }
-
-        const dbVersion = await authRepo.getTokenVersion(userId);
-        cacheTokenVersion(userId, dbVersion);
-        return dbVersion;
-    }
-
-    /**
-     * JWT Authentication Middleware
-     *
-     * Security posture: FAIL CLOSED.
-     *   - If Redis is down AND PG is down → deny access (401)
-     *   - If token_version check fails for any reason → deny access (401)
-     *   - Revoked tokens are rejected immediately (within 30s cache TTL)
-     *
-     * Performance: Token_version is cached in Redis with a 30s TTL.
-     *   - ~97% of requests are served from Redis (sub-ms)
-     *   - PG is only hit on cold cache or after TTL expiry
-     *
-     * Per TRD §07 — 15-minute TTL access tokens, memory-only storage.
-     */
     async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
         const requestId = uuidv4();
         req.requestId = requestId;
@@ -90,49 +36,64 @@ export function createAuthMiddleware(authRepo: AuthRepository): AuthMiddleware {
 
         let decoded: JwtPayload;
         try {
-            decoded = jwt.verify(token, config.JWT_SECRET, {
+            // 1. Stateless signature check (Fast)
+            decoded = jwt.verify(token, config.SUPABASE_JWT_SECRET, {
                 algorithms: ['HS256'],
             }) as JwtPayload;
+
+            // 2. Active Kill Switch check (Supabase Session API)
+            // This aligns with Supabase's global sign-out and idle session termination
+            const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY);
+            const { data, error } = await supabase.auth.getUser(token);
+
+            if (error || !data.user) {
+                log.warn({ error, requestId }, 'Active session termination trigger — Supabase session invalid');
+                return next(new AuthenticationError('Session terminated or invalid.'));
+            }
+
         } catch (err) {
             if (err instanceof jwt.TokenExpiredError) {
                 return next(new TokenExpiredError());
             }
+            log.error({ err, requestId }, 'JWT Signature Validation Failed');
             return next(new AuthenticationError('Invalid access token.'));
         }
 
-        // Set request context from verified JWT
-        req.ctx = {
-            user: {
-                id: decoded.sub,
-                organisationId: decoded.org,
-                role: decoded.role,
-                mfaVerified: decoded.mfa,
-            },
-            requestId,
-            ipAddress: req.ip || req.socket.remoteAddress || 'unknown',
-        };
-
-        // Token version check — instant JWT revocation (FAIL CLOSED)
         try {
-            const currentVersion = await getTokenVersion(decoded.sub);
+            // Retrieve User Role & Org context from local DB
+            const user = await adminRepo.getUserById(decoded.sub);
 
-            if (decoded.tv !== undefined && decoded.tv !== currentVersion) {
-                return next(new AuthenticationError('Token has been revoked.'));
+            if (!user) {
+                log.warn({ sub: decoded.sub, requestId }, 'Authenticated user not found in local database');
+                return next(new AuthenticationError('User profile not found.'));
             }
 
+            if (!user.is_active) {
+                log.warn({ sub: decoded.sub, requestId }, 'Deactivated user attempted access');
+                return next(new AuthenticationError('Account is deactivated.'));
+            }
+
+            // Set request context
+            req.ctx = {
+                user: {
+                    id: user.id,
+                    organisationId: user.organisation_id,
+                    role: user.role,
+                    // Map Supabase exact Assurance Level 2 to our MFA verified flag
+                    mfaVerified: decoded.aal === 'aal2',
+                },
+                requestId,
+                ipAddress: req.ip || req.socket.remoteAddress || 'unknown',
+            };
+
             next();
-        } catch (err: any) {
-            // FAIL CLOSED: Any infrastructure error → deny access
-            log.error({ err, requestId }, 'Token version check failed — DENYING ACCESS');
-            return next(new AuthenticationError('Unable to verify token. Please try again.'));
+        } catch (err) {
+            log.error({ err, requestId }, 'Error fetching user context during authentication');
+            return next(new AuthenticationError('Internal authentication error.'));
         }
     }
 
-    /**
-     * Optional auth — sets context if token present, continues regardless.
-     * No token_version check (used for public endpoints with optional personalization).
-     */
-    function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
+    async function optionalAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
         req.requestId = uuidv4();
 
         const authHeader = req.headers.authorization;
@@ -144,22 +105,31 @@ export function createAuthMiddleware(authRepo: AuthRepository): AuthMiddleware {
         try {
             const token = authHeader.substring(7);
             const config = getConfig();
-            const decoded = jwt.verify(token, config.JWT_SECRET, {
+            const decoded = jwt.verify(token, config.SUPABASE_JWT_SECRET, {
                 algorithms: ['HS256'],
             }) as JwtPayload;
 
-            req.ctx = {
-                user: {
-                    id: decoded.sub,
-                    organisationId: decoded.org,
-                    role: decoded.role,
-                    mfaVerified: decoded.mfa,
-                },
-                requestId: req.requestId,
-                ipAddress: req.ip || req.socket.remoteAddress || 'unknown',
-            };
+            const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY);
+            const { data, error } = await supabase.auth.getUser(token);
+
+            if (!error && data.user) {
+                const user = await adminRepo.getUserById(decoded.sub);
+
+                if (user && user.is_active) {
+                    req.ctx = {
+                        user: {
+                            id: user.id,
+                            organisationId: user.organisation_id,
+                            role: user.role,
+                            mfaVerified: decoded.aal === 'aal2',
+                        },
+                        requestId: req.requestId,
+                        ipAddress: req.ip || req.socket.remoteAddress || 'unknown',
+                    };
+                }
+            }
         } catch {
-            // Token invalid — continue without auth context
+            // Token invalid or user not found — continue silently without auth context
         }
 
         next();

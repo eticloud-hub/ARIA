@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Eye, EyeOff, AlertCircle } from 'lucide-react';
-import api from '../lib/api';
-import { useAuthStore } from '../stores/authStore';
+import { supabase } from '../lib/supabase';
 
 /**
  * LoginScreen — S-01
@@ -24,21 +23,18 @@ export const LoginScreen: React.FC = () => {
         setLoading(true);
 
         try {
-            const { data } = await api.post('/auth/login', { email, password });
-            const result = data.data;
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
 
-            setAccessToken(result.accessToken);
-            setUser(result.user);
-
-            if (result.requiresMfa) {
-                setRequiresMfa(true);
-                navigate('/mfa');
+            if (signInError) {
+                setError(signInError.message);
             } else {
                 navigate('/');
             }
-        } catch (err: unknown) {
-            const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
-            setError(axiosErr.response?.data?.error?.message || 'Login failed. Please try again.');
+        } catch {
+            setError('Login failed due to an unexpected error. Please try again.');
         } finally {
             setLoading(false);
         }

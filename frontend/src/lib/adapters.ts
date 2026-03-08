@@ -84,6 +84,7 @@ export interface ArtifactDto {
 
 export interface AnalysisResultDto {
     id: string;
+    jobId: string;
     caseId: string;
     score: number;
     confidenceLow: number;
@@ -91,9 +92,16 @@ export interface AnalysisResultDto {
     mimicryFlag: boolean;
     dimensions: DimensionDto[];
     insufficientDimensions: string[];
-    agentNotes: string | null;
+    agentProfileNotes: string | null;
     executiveSummary: string | null;
     createdAt: Date;
+}
+
+export interface EvidenceDto {
+    type: string;
+    severity: string;
+    timestampOffsetMs: number;
+    description: string;
 }
 
 export interface DimensionDto {
@@ -102,6 +110,7 @@ export interface DimensionDto {
     score: number;
     confidence: number;
     evidenceCount: number;
+    evidence: EvidenceDto[];
 }
 
 // --- Adapters ---
@@ -143,6 +152,7 @@ export function adaptArtifact(api: ApiArtifact): ArtifactDto {
 export function adaptAnalysisResult(api: ApiAnalysisResult): AnalysisResultDto {
     return {
         id: api.id,
+        jobId: api.job_id,
         caseId: api.case_id,
         score: api.human_attribution_score,
         confidenceLow: api.confidence_interval_low,
@@ -154,9 +164,15 @@ export function adaptAnalysisResult(api: ApiAnalysisResult): AnalysisResultDto {
             score: d.score,
             confidence: d.confidence,
             evidenceCount: d.evidence.length,
+            evidence: d.evidence.map((e) => ({
+                type: e.type,
+                severity: e.severity,
+                timestampOffsetMs: e.timestamp_offset_ms,
+                description: e.description,
+            })),
         })),
         insufficientDimensions: api.insufficient_data_dimensions,
-        agentNotes: api.agent_profile_notes,
+        agentProfileNotes: api.agent_profile_notes,
         executiveSummary: api.executive_summary,
         createdAt: new Date(api.created_at),
     };

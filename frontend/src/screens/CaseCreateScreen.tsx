@@ -1,8 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload, FolderPlus } from 'lucide-react';
+import { ArrowLeft, Upload, FolderPlus, AlertCircle } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import api from '../lib/api';
 import { useUiStore } from '../stores/uiStore';
+
+// Mirroring the backend src/modules/cases/cases.schemas.ts validation
+const createCaseSchema = z.object({
+    title: z.string().min(1, 'Title is required').max(200, 'Title cannot exceed 200 characters'),
+    description: z.string().max(2000, 'Description cannot exceed 2000 characters').optional(),
+});
+
+type CreateCaseFormValues = z.infer<typeof createCaseSchema>;
 
 /**
  * CaseCreateScreen — S-04
@@ -11,16 +22,18 @@ import { useUiStore } from '../stores/uiStore';
 export const CaseCreateScreen: React.FC = () => {
     const navigate = useNavigate();
     const { addToast } = useUiStore();
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [loading, setLoading] = useState(false);
+    const {
+        register,
+        handleSubmit,
+        formState: { errors, isSubmitting },
+    } = useForm<CreateCaseFormValues>({
+        resolver: zodResolver(createCaseSchema),
+        defaultValues: { title: '', description: '' },
+    });
 
-    const handleCreate = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-
+    const onSubmit = async (values: CreateCaseFormValues) => {
         try {
-            const { data } = await api.post('/cases', { title, description: description || undefined });
+            const { data } = await api.post('/cases', values);
             addToast({
                 type: 'success',
                 title: 'Case Created',
@@ -34,8 +47,6 @@ export const CaseCreateScreen: React.FC = () => {
                 title: 'Error',
                 message: axiosErr.response?.data?.error?.message || 'Failed to create case.',
             });
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -60,7 +71,7 @@ export const CaseCreateScreen: React.FC = () => {
                     </div>
                 </div>
 
-                <form onSubmit={handleCreate} className="space-y-5">
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                             Case Title <span className="text-red-500">*</span>
@@ -68,13 +79,16 @@ export const CaseCreateScreen: React.FC = () => {
                         <input
                             id="case-title"
                             type="text"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            className="aria-input"
+                            {...register('title')}
+                            className={`aria-input ${errors.title ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                             placeholder="e.g., Data exfiltration investigation — Q1 2026"
-                            required
-                            maxLength={200}
                         />
+                        {errors.title && (
+                            <p className="mt-1 flex items-center gap-1 text-sm text-red-600">
+                                <AlertCircle className="w-3.5 h-3.5" />
+                                {errors.title.message}
+                            </p>
+                        )}
                     </div>
 
                     <div>
@@ -83,22 +97,26 @@ export const CaseCreateScreen: React.FC = () => {
                         </label>
                         <textarea
                             id="case-description"
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            className="aria-input min-h-[100px] resize-y"
+                            {...register('description')}
+                            className={`aria-input min-h-[100px] resize-y ${errors.description ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                             placeholder="Brief description of the investigation scope and context..."
-                            maxLength={2000}
                         />
+                        {errors.description && (
+                            <p className="mt-1 flex items-center gap-1 text-sm text-red-600">
+                                <AlertCircle className="w-3.5 h-3.5" />
+                                {errors.description.message}
+                            </p>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
                         <button
                             id="create-case-submit"
                             type="submit"
-                            disabled={loading || !title}
+                            disabled={isSubmitting}
                             className="aria-btn-primary"
                         >
-                            {loading ? 'Creating...' : 'Create Case'}
+                            {isSubmitting ? 'Creating...' : 'Create Case'}
                         </button>
                         <button
                             type="button"

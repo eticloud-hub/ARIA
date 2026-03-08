@@ -5,7 +5,8 @@
   "description": "ARIA — AI-Rendered Intent Analyzer: Forensic Behavioral Attribution Platform",
   "workspaces": [
     "backend",
-    "frontend"
+    "frontend",
+    "shared"
   ],
   "scripts": {
     "dev:backend": "npm run dev --workspace=backend",

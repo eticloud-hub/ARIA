@@ -14,13 +14,10 @@ const envSchema = z.object({
     REDIS_CACHE_URL: z.string().default('redis://localhost:6380'),
 
     // JWT
-    JWT_SECRET: z.string().min(32).default('aria-dev-jwt-secret-min-32-chars-long!!'),
-    JWT_EXPIRES_IN: z.string().default('15m'),
-    REFRESH_TOKEN_SECRET: z.string().min(32).default('aria-dev-refresh-secret-min-32-chars!!'),
-    REFRESH_TOKEN_EXPIRES_DAYS: z.coerce.number().default(7),
-
-    // MFA
-    MFA_ENCRYPTION_KEY: z.string().min(32).default('aria-dev-mfa-key-min-32-chars-long!!'),
+    // Supabase
+    SUPABASE_URL: z.string().url().default('http://localhost:54321'),
+    SUPABASE_ANON_KEY: z.string().min(1).default('ey...'),
+    SUPABASE_JWT_SECRET: z.string().min(32).default('super-secret-supabase-jwt-key-that-is-at-least-32-chars!'),
 
     // S3
     S3_ENDPOINT: z.string().default('http://localhost:9000'),

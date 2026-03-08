@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, KeyRound } from 'lucide-react';
-import api from '../lib/api';
+import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 
 /**
@@ -21,13 +21,42 @@ export const MFAScreen: React.FC = () => {
         setLoading(true);
 
         try {
-            const { data } = await api.post('/auth/mfa/verify', { code });
-            setAccessToken(data.data.accessToken);
-            setRequiresMfa(false);
-            navigate('/');
-        } catch (err: unknown) {
-            const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
-            setError(axiosErr.response?.data?.error?.message || 'Invalid code.');
+            const factors = await supabase.auth.mfa.listFactors();
+            if (factors.error) {
+                setError(factors.error.message);
+                setLoading(false);
+                return;
+            }
+
+            const totpFactor = factors.data.totp[0];
+            if (!totpFactor) {
+                setError('No authenticator app enrolled on this account.');
+                setLoading(false);
+                return;
+            }
+
+            const challenge = await supabase.auth.mfa.challenge({ factorId: totpFactor.id });
+            if (challenge.error) {
+                setError(challenge.error.message);
+                setLoading(false);
+                return;
+            }
+
+            const verify = await supabase.auth.mfa.verify({
+                factorId: totpFactor.id,
+                challengeId: challenge.data.id,
+                code,
+            });
+
+            if (verify.error) {
+                setError(verify.error.message);
+            } else {
+                // Verification successful, update Zustand so App shell drops the MFA gate
+                await useAuthStore.getState().checkMfa();
+                navigate('/');
+            }
+        } catch {
+            setError('Verification failed due to an unexpected error.');
         } finally {
             setLoading(false);
         }

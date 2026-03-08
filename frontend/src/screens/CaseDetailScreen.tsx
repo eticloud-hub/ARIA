@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     ArrowLeft, Upload, Play, FileText,
     Hash, Clock, FileType, CheckCircle, XCircle
@@ -12,6 +13,7 @@ import { useUiStore } from '../stores/uiStore';
 import api from '../lib/api';
 import type { CaseDto, ArtifactDto, AnalysisResultDto } from '../lib/adapters';
 import { adaptCase, adaptArtifact, adaptAnalysisResult } from '../lib/adapters';
+import { ArtifactUploader } from '../components/organisms/ArtifactUploader';
 
 /**
  * CaseDetailScreen — S-05 / S-06 / S-07
@@ -21,18 +23,14 @@ export const CaseDetailScreen: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const { user } = useAuthStore();
     const { addToast } = useUiStore();
-    const [caseData, setCaseData] = useState<CaseDto | null>(null);
-    const [artifacts, setArtifacts] = useState<ArtifactDto[]>([]);
-    const [result, setResult] = useState<AnalysisResultDto | null>(null);
-    const [analysisStatus, setAnalysisStatus] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
+    const [showUploader, setShowUploader] = useState(false);
 
-    useEffect(() => {
-        if (id) loadAll();
-    }, [id]);
-
-    const loadAll = async () => {
-        try {
+    // Main query fetches case, artifacts, result, and status concurrently
+    const { data, isLoading: loading, error } = useQuery({
+        queryKey: ['case-detail', id],
+        queryFn: async () => {
+            if (!id) throw new Error('No ID');
             const [caseRes, artifactsRes, resultRes, statusRes] = await Promise.all([
                 api.get(`/cases/${id}`),
                 api.get(`/cases/${id}/artifacts`),
@@ -40,22 +38,31 @@ export const CaseDetailScreen: React.FC = () => {
                 api.get(`/cases/${id}/analysis/status`).catch(() => ({ data: { data: null } })),
             ]);
 
-            setCaseData(adaptCase(caseRes.data.data));
-            setArtifacts((artifactsRes.data.data || []).map(adaptArtifact));
-            if (resultRes.data.data) setResult(adaptAnalysisResult(resultRes.data.data));
-            if (statusRes.data.data) setAnalysisStatus(statusRes.data.data.status);
-        } catch {
-            addToast({ type: 'error', title: 'Failed to load case data' });
-        } finally {
-            setLoading(false);
-        }
-    };
+            return {
+                caseData: adaptCase(caseRes.data.data),
+                artifacts: (artifactsRes.data.data || []).map(adaptArtifact) as ArtifactDto[],
+                result: resultRes.data.data ? adaptAnalysisResult(resultRes.data.data) : null,
+                analysisStatus: statusRes.data.data ? statusRes.data.data.status : null,
+            };
+        },
+        // Poll every 5s IF the job is running or queued, so we get the result automatically
+        refetchInterval: (query) => {
+            const status = query.state?.data?.analysisStatus;
+            return (status === 'queued' || status === 'running') ? 5000 : false;
+        },
+        enabled: !!id,
+    });
+
+    const caseData = data?.caseData;
+    const artifacts = data?.artifacts || [];
+    const result = data?.result;
+    const analysisStatus = data?.analysisStatus;
 
     const handleStartAnalysis = async () => {
         try {
             await api.post(`/cases/${id}/analysis/start`, { priority: 'standard' });
             addToast({ type: 'success', title: 'Analysis Started', message: 'HABD analysis has been queued.' });
-            loadAll();
+            queryClient.invalidateQueries({ queryKey: ['case-detail', id] });
         } catch (err: unknown) {
             const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
             addToast({ type: 'error', title: 'Error', message: axiosErr.response?.data?.error?.message || 'Failed to start analysis.' });
@@ -88,6 +95,10 @@ export const CaseDetailScreen: React.FC = () => {
         );
     }
 
+    if (error) {
+        return <div className="p-8 text-red-500">Failed to load case data.</div>;
+    }
+
     if (!caseData) return <p className="text-slate-500">Case not found.</p>;
 
     const isWriteUser = user?.role !== 'reviewer';
@@ -95,6 +106,14 @@ export const CaseDetailScreen: React.FC = () => {
 
     return (
         <div className="animate-fade-in">
+            {showUploader && id && (
+                <ArtifactUploader
+                    caseId={id}
+                    onClose={() => setShowUploader(false)}
+                    onUploadSuccess={() => queryClient.invalidateQueries({ queryKey: ['case-detail', id] })}
+                />
+            )}
+
             {/* Header */}
             <div className="flex items-center gap-3 mb-6">
                 <Link to="/" className="aria-btn-ghost p-2">
@@ -134,7 +153,11 @@ export const CaseDetailScreen: React.FC = () => {
                                 Artifacts ({artifacts.length})
                             </h2>
                             {isWriteUser && caseData.status === 'draft' && (
-                                <button className="aria-btn-secondary text-xs" id="upload-artifact-btn">
+                                <button
+                                    onClick={() => setShowUploader(true)}
+                                    className="aria-btn-secondary text-xs"
+                                    id="upload-artifact-btn"
+                                >
                                     <Upload className="w-3.5 h-3.5" /> Upload
                                 </button>
                             )}

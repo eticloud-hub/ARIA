@@ -1,9 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Search, FolderOpen, Activity, FileCheck, AlertTriangle } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { StatusBadge } from '../components/atoms/StatusBadge';
 import { useAuthStore } from '../stores/authStore';
-import api from '../lib/api';
 import type { CaseDto } from '../lib/adapters';
 import { adaptCase } from '../lib/adapters';
 
@@ -14,31 +11,37 @@ import { adaptCase } from '../lib/adapters';
 export const DashboardScreen: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuthStore();
-    const [cases, setCases] = useState<CaseDto[]>([]);
-    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const [filter, setFilter] = useState<'all' | 'my_cases' | 'awaiting_review' | 'completed'>('all');
 
-    useEffect(() => {
-        loadCases();
-    }, []);
+    const { data: casesData, isLoading: loading } = useQuery({
+        queryKey: ['cases'],
+        queryFn: async () => {
+            // Note: In a real environment, we'd want to also dynamically pass the auth header from supabase.
+            // Our interceptor handles this automatically.
+            const { data } = await import('../lib/api').then(m => m.default.get('/cases?limit=100'));
+            return (data.data || []).map(adaptCase) as CaseDto[];
+        },
+    });
 
-    const loadCases = async () => {
-        try {
-            const { data } = await api.get('/cases?limit=50');
-            const adapted = (data.data || []).map(adaptCase);
-            setCases(adapted);
-        } catch {
-            // Handle error
-        } finally {
-            setLoading(false);
+    const cases = casesData || [];
+
+    const filteredCases = cases.filter((c) => {
+        const matchesSearch = c.title.toLowerCase().includes(search.toLowerCase()) || c.referenceId.toLowerCase().includes(search.toLowerCase());
+
+        let matchesTab = true;
+        if (filter === 'my_cases') {
+            // Since we don't return the investigator ID currently, we'll pseudo filter based on user logic if we had it.
+            // For now, this filter assumes all returned cases belong to this user if role is investigator.
+            matchesTab = true;
+        } else if (filter === 'awaiting_review') {
+            matchesTab = c.status === 'complete';
+        } else if (filter === 'completed') {
+            matchesTab = c.status === 'complete';
         }
-    };
 
-    const filteredCases = cases.filter(
-        (c) =>
-            c.title.toLowerCase().includes(search.toLowerCase()) ||
-            c.referenceId.toLowerCase().includes(search.toLowerCase())
-    );
+        return matchesSearch && matchesTab;
+    });
 
     const stats = {
         total: cases.length,
@@ -68,6 +71,27 @@ export const DashboardScreen: React.FC = () => {
                             </div>
                         </div>
                     </div>
+                ))}
+            </div>
+
+            {/* Quick Filters */}
+            <div className="flex items-center gap-6 border-b border-slate-200 mb-6">
+                {[
+                    { id: 'all', label: 'All Cases' },
+                    { id: 'my_cases', label: 'My Cases' },
+                    { id: 'awaiting_review', label: 'Awaiting Review' },
+                    { id: 'completed', label: 'Completed' },
+                ].map((tab) => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setFilter(tab.id as any)}
+                        className={`pb-3 text-sm font-medium border-b-2 transition-colors ${filter === tab.id
+                                ? 'border-navy-600 text-navy-600'
+                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                            }`}
+                    >
+                        {tab.label}
+                    </button>
                 ))}
             </div>
 

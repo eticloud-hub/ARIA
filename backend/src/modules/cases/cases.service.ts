@@ -23,7 +23,7 @@ export class CasesService {
 
     async list(
         organisationId: string,
-        options: { status?: string; cursor?: string; limit: number }
+        options: { status?: string; search?: string; cursor?: string; limit: number }
     ): Promise<{ cases: Case[]; hasMore: boolean; nextCursor: string | null }> {
         const result = await this.caseRepo.findByOrgId(organisationId, options);
         return {

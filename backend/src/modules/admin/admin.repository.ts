@@ -25,6 +25,15 @@ export class AdminRepository extends BaseRepository {
         return rows[0] ?? null;
     }
 
+    async getUserById(id: string): Promise<SafeUser | null> {
+        const { rows } = await this.query<SafeUser>(
+            `SELECT id, organisation_id, email, full_name, role, is_active, mfa_enabled, last_login_at, created_at, updated_at
+             FROM users WHERE id = $1`,
+            [id]
+        );
+        return rows[0] ?? null;
+    }
+
     async createUser(
         id: string,
         organisationId: string,
@@ -76,21 +85,33 @@ export class AdminRepository extends BaseRepository {
         if (options.entityId) { whereClause += ` AND ae.entity_id = $${idx++}`; params.push(options.entityId); }
         if (options.actorId) { whereClause += ` AND ae.actor_id = $${idx++}`; params.push(options.actorId); }
         if (options.cursor) {
-            whereClause += ` AND ae.created_at < (SELECT created_at FROM audit_events WHERE id = $${idx++})`;
-            params.push(options.cursor);
+            // Decode composite cursor: base64(createdAtIso|id)
+            const decoded = Buffer.from(options.cursor, 'base64').toString('utf-8');
+            const [cursorMs, cursorId] = decoded.split('|');
+            if (cursorMs && cursorId) {
+                // Tuple comparison for true Keyset Pagination (vital for partitioned tables)
+                whereClause += ` AND (ae.created_at, ae.id) < ($${idx++}, $${idx++})`;
+                params.push(new Date(Number(cursorMs)), cursorId);
+            }
         }
 
         params.push(options.limit + 1);
 
         const { rows } = await this.query<AuditEvent>(
             `SELECT ae.* FROM audit_events ae ${whereClause}
-             ORDER BY ae.created_at DESC LIMIT $${idx}`,
+             ORDER BY ae.created_at DESC, ae.id DESC LIMIT $${idx}`,
             params
         );
 
         const hasMore = rows.length > options.limit;
         const events = hasMore ? rows.slice(0, options.limit) : rows;
-        const nextCursor = hasMore && events.length > 0 ? events[events.length - 1]!.id : null;
+
+        let nextCursor: string | null = null;
+        if (hasMore && events.length > 0) {
+            const last = events[events.length - 1]!;
+            // Encode composite cursor
+            nextCursor = Buffer.from(`${last.created_at.getTime()}|${last.id}`).toString('base64');
+        }
 
         return { events, hasMore, nextCursor };
     }

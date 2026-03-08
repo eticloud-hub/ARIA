@@ -182,15 +182,13 @@ export interface ApiError {
     request_id: string;
 }
 
-// --- JWT Payload ---
+// --- JWT Payload (Supabase Standard) ---
 export interface JwtPayload {
-    sub: string;           // user ID
-    org: string;           // organisation ID
-    role: UserRole;
-    mfa: boolean;          // MFA verified flag
-    tv: number;            // token version — increment to revoke all tokens
-    iat: number;
+    sub: string;           // Supabase user ID UUID
+    aal?: string;          // Assurance Level (e.g. "aal1" or "aal2")
+    email?: string;
     exp: number;
+    iat: number;
 }
 
 // --- Request Context (attached by middleware) ---

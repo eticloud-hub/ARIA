@@ -37,7 +37,7 @@ export class CaseRepository extends BaseRepository {
 
     async findByOrgId(
         organisationId: string,
-        options: { status?: string; cursor?: string; limit: number }
+        options: { status?: string; search?: string; cursor?: string; limit: number }
     ): Promise<{ rows: Case[]; hasMore: boolean; nextCursor: string | null }> {
         let whereClause = 'WHERE c.organisation_id = $1 AND c.deleted_at IS NULL';
         const params: unknown[] = [organisationId];
@@ -46,6 +46,12 @@ export class CaseRepository extends BaseRepository {
         if (options.status) {
             whereClause += ` AND c.status = $${idx}`;
             params.push(options.status);
+            idx++;
+        }
+
+        if (options.search) {
+            whereClause += ` AND search_vector @@ plainlyto_tsquery('english', $${idx})`;
+            params.push(options.search);
             idx++;
         }
 

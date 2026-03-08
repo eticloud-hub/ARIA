@@ -255,13 +255,13 @@ INSERT INTO organisations (id, name, slug) VALUES
 
 INSERT INTO users (id, organisation_id, email, password_hash, full_name, role) VALUES
     ('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
-     'admin@aria.dev', '$2a$12$LJ3m4ys2Y8fzOgPJ5Jdx8OQXxJz6V8N0Gf0NvMfkXpFqW8Ke5fZm',
+     'admin@aria.dev', '$2a$10$jo5QtzCbSe1QVItVrFYYWueSSobgsMp2ebXddJU1f2.5O36v9i5qfa',
      'ARIA Admin', 'admin'),
     ('b0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001',
-     'investigator@aria.dev', '$2a$12$LJ3m4ys2Y8fzOgPJ5Jdx8OQXxJz6V8N0Gf0NvMfkXpFqW8Ke5fZm',
+     'investigator@aria.dev', '$2a$10$jo5QtzCbSe1QVItVrFYYWueSSobgsMp2ebXddJU1f2.5O36v9i5qfa',
      'Jane Investigator', 'investigator'),
     ('b0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001',
-     'reviewer@aria.dev', '$2a$12$LJ3m4ys2Y8fzOgPJ5Jdx8OQXxJz6V8N0Gf0NvMfkXpFqW8Ke5fZm',
+     'reviewer@aria.dev', '$2a$10$jo5QtzCbSe1QVItVrFYYWueSSobgsMp2ebXddJU1f2.5O36v9i5qfa',
      'John Reviewer', 'reviewer');
     `);
 }

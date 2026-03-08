@@ -1,47 +1,66 @@
 import { create } from 'zustand';
-
-interface AuthUser {
-    id: string;
-    email: string;
-    fullName: string;
-    role: 'admin' | 'investigator' | 'reviewer';
-}
+import { supabase } from '../lib/supabase';
+import type { Session, User } from '@supabase/supabase-js';
 
 interface AuthState {
-    accessToken: string | null;
-    user: AuthUser | null;
+    session: Session | null;
+    user: User | null;
     isAuthenticated: boolean;
     requiresMfa: boolean;
 
-    setAccessToken: (token: string) => void;
-    setUser: (user: AuthUser) => void;
-    setRequiresMfa: (requires: boolean) => void;
-    logout: () => void;
+    setSession: (session: Session | null) => void;
+    checkMfa: () => Promise<void>;
+    logout: () => Promise<void>;
 }
 
-/**
- * Auth Store — Zustand
- * Access tokens are stored ONLY in memory (JS variable).
- * Per TRD §07: "never localStorage" — prevents XSS token theft.
- */
-export const useAuthStore = create<AuthState>((set) => ({
-    accessToken: null,
+export const useAuthStore = create<AuthState>((set, get) => ({
+    session: null,
     user: null,
     isAuthenticated: false,
     requiresMfa: false,
 
-    setAccessToken: (token) =>
-        set({ accessToken: token, isAuthenticated: true }),
-
-    setUser: (user) => set({ user }),
-
-    setRequiresMfa: (requires) => set({ requiresMfa: requires }),
-
-    logout: () =>
+    setSession: (session) => {
         set({
-            accessToken: null,
+            session,
+            user: session?.user || null,
+            isAuthenticated: !!session,
+        });
+
+        // Whenever a session is set/updated, verify AAL level
+        if (session) {
+            get().checkMfa();
+        } else {
+            set({ requiresMfa: false });
+        }
+    },
+
+    checkMfa: async () => {
+        const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (error) {
+            console.error('Failed to verify MFA assurance level', error);
+            return;
+        }
+
+        // If user has set up MFA (aal2 is next), but hasn't verified it in this session yet (currently aal1)
+        if (data.nextLevel === 'aal2' && data.currentLevel === 'aal1') {
+            set({ requiresMfa: true });
+        } else {
+            set({ requiresMfa: false });
+        }
+    },
+
+    logout: async () => {
+        await supabase.auth.signOut();
+        set({
+            session: null,
             user: null,
             isAuthenticated: false,
             requiresMfa: false,
-        }),
+        });
+    },
 }));
+
+// Global Auth Listener to keep Zustand in sync seamlessly
+supabase.auth.onAuthStateChange((_event, session) => {
+    useAuthStore.getState().setSession(session);
+});

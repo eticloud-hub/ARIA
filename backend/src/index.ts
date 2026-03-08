@@ -12,12 +12,12 @@ import { runMigrations } from './db/migrate';
 import { errorHandler } from './middleware/errorHandler';
 import { createContainer } from './container';
 import { createCasesRouter } from './modules/cases/cases.router';
-import { createAuthRouter } from './modules/auth/auth.router';
 import { createArtifactsRouter } from './modules/artifacts/artifacts.router';
 import { createAnalysisRouter } from './modules/analysis/analysis.router';
 import { createReportsRouter } from './modules/reports/reports.router';
 import { createAnnotationsRouter } from './modules/annotations/annotations.router';
 import { createAdminRouter } from './modules/admin/admin.router';
+import { createTusRouter } from './modules/artifacts/tus.router';
 
 // ============================================================================
 // COMPOSITION ROOT
@@ -71,13 +71,13 @@ app.get('/api/v1/health', (_req, res) => {
 // ============================================================================
 // API Routes — each router factory receives its dependencies from the container
 // ============================================================================
-app.use('/api/v1/auth', createAuthRouter(container));
 app.use('/api/v1/cases', createCasesRouter(container));
 app.use('/api/v1/cases/:id/artifacts', createArtifactsRouter(container));
 app.use('/api/v1/cases/:id/analysis', createAnalysisRouter(container));
 app.use('/api/v1/cases/:id/reports', createReportsRouter(container));
 app.use('/api/v1/reports/:id/annotations', createAnnotationsRouter(container));
 app.use('/api/v1/admin', createAdminRouter(container));
+app.use('/api/v1/tus', createTusRouter(container));
 
 // ============================================================================
 // Error Handler (must be last)

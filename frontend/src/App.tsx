@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
 import { useUiStore } from './stores/uiStore';
-import { tryRestoreSession } from './lib/authApi';
+import { supabase } from './lib/supabase';
 import { Sidebar } from './components/organisms/Sidebar';
 import { Header } from './components/organisms/Header';
 import { LoginScreen } from './screens/LoginScreen';
@@ -11,6 +11,8 @@ import { MFAScreen } from './screens/MFAScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { CaseCreateScreen } from './screens/CaseCreateScreen';
 import { CaseDetailScreen } from './screens/CaseDetailScreen';
+import { ReportScreen } from './screens/ReportScreen';
+import { AdminScreen } from './screens/AdminScreen';
 import { clsx } from 'clsx';
 
 const queryClient = new QueryClient({
@@ -79,7 +81,7 @@ const App: React.FC = () => {
     const [isRestoring, setIsRestoring] = useState(true);
 
     useEffect(() => {
-        tryRestoreSession().finally(() => setIsRestoring(false));
+        supabase.auth.getSession().finally(() => setIsRestoring(false));
     }, []);
 
     if (isRestoring) {
@@ -106,6 +108,8 @@ const App: React.FC = () => {
                         <Route path="/" element={<DashboardScreen />} />
                         <Route path="/cases/new" element={<CaseCreateScreen />} />
                         <Route path="/cases/:id" element={<CaseDetailScreen />} />
+                        <Route path="/cases/:id/report" element={<ReportScreen />} />
+                        <Route path="/admin/users" element={<AdminScreen />} />
                     </Route>
 
                     {/* Fallback */}

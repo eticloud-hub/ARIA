@@ -22,11 +22,11 @@ export function createCasesRouter(container: Container): Router {
      * GET /api/v1/cases
      */
     router.get('/', validate({ query: listCasesQuerySchema }), async (req: Request, res: Response) => {
-        const { status, cursor, limit } = req.query as unknown as {
-            status?: string; cursor?: string; limit: number;
+        const { status, search, cursor, limit } = req.query as unknown as {
+            status?: string; search?: string; cursor?: string; limit: number;
         };
 
-        const result = await casesService.list(req.ctx.user.organisationId, { status, cursor, limit });
+        const result = await casesService.list(req.ctx.user.organisationId, { status, search, cursor, limit });
 
         sendSuccess(res, result.cases, 200, {
             cursor: result.nextCursor,

@@ -1,7 +1,6 @@
 import React from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { LogOut, User } from 'lucide-react';
-import api from '../../lib/api';
 
 /**
  * Header — Top bar with user info and logout
@@ -10,12 +9,7 @@ export const Header: React.FC = () => {
     const { user, logout } = useAuthStore();
 
     const handleLogout = async () => {
-        try {
-            await api.post('/auth/logout');
-        } catch {
-            // Logout even if API call fails
-        }
-        logout();
+        await logout();
     };
 
     return (
