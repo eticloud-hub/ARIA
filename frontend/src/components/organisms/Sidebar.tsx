@@ -30,7 +30,7 @@ export const Sidebar: React.FC = () => {
     const { sidebarCollapsed, toggleSidebar } = useUiStore();
 
     const filteredItems = NAV_ITEMS.filter(
-        (item) => user && item.roles.includes(user.role)
+        (item) => user && item.roles.includes(user.user_metadata?.role as string)
     );
 
     return (

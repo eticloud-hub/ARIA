@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
 import { useUiStore } from './stores/uiStore';
-import { supabase } from './lib/supabase';
 import { Sidebar } from './components/organisms/Sidebar';
 import { Header } from './components/organisms/Header';
 import { LoginScreen } from './screens/LoginScreen';
@@ -14,6 +13,8 @@ import { CaseDetailScreen } from './screens/CaseDetailScreen';
 import { ReportScreen } from './screens/ReportScreen';
 import { AdminScreen } from './screens/AdminScreen';
 import { clsx } from 'clsx';
+
+type UserRole = 'admin' | 'investigator' | 'reviewer';
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -26,8 +27,20 @@ const queryClient = new QueryClient({
 
 // Protected route wrapper
 const ProtectedLayout: React.FC = () => {
-    const { isAuthenticated, requiresMfa } = useAuthStore();
+    const { isAuthenticated, isLoading, requiresMfa } = useAuthStore();
     const { sidebarCollapsed } = useUiStore();
+
+    // Wait for the initial session restore before making any routing decisions
+    if (isLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <div className="flex flex-col items-center">
+                    <div className="w-12 h-12 border-4 border-slate-300 border-t-emerald-600 rounded-full animate-spin"></div>
+                    <p className="mt-4 text-slate-500 font-medium">Loading session...</p>
+                </div>
+            </div>
+        );
+    }
 
     if (!isAuthenticated) return <Navigate to="/login" replace />;
     if (requiresMfa) return <Navigate to="/mfa" replace />;
@@ -49,6 +62,18 @@ const ProtectedLayout: React.FC = () => {
             <ToastContainer />
         </div>
     );
+};
+
+// RBAC Guard component
+const RoleGuard: React.FC<{ allowedRoles: UserRole[]; children: React.ReactNode }> = ({ allowedRoles, children }) => {
+    const { user } = useAuthStore();
+    const userRole = user?.user_metadata?.role as UserRole;
+
+    if (!userRole || !allowedRoles.includes(userRole)) {
+        return <Navigate to="/" replace />;
+    }
+
+    return <>{children}</>;
 };
 
 // Toast notifications
@@ -78,13 +103,12 @@ const ToastContainer: React.FC = () => {
 };
 
 const App: React.FC = () => {
-    const [isRestoring, setIsRestoring] = useState(true);
+    // Session restoration is handled by initAuthListener() in main.tsx BEFORE
+    // React renders. By the time this component mounts, isLoading is already false
+    // and the session (if any) is already in the store. No useEffect needed.
+    const isLoading = useAuthStore((s) => s.isLoading);
 
-    useEffect(() => {
-        supabase.auth.getSession().finally(() => setIsRestoring(false));
-    }, []);
-
-    if (isRestoring) {
+    if (isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <div className="animate-pulse flex flex-col items-center">
@@ -109,7 +133,11 @@ const App: React.FC = () => {
                         <Route path="/cases/new" element={<CaseCreateScreen />} />
                         <Route path="/cases/:id" element={<CaseDetailScreen />} />
                         <Route path="/cases/:id/report" element={<ReportScreen />} />
-                        <Route path="/admin/users" element={<AdminScreen />} />
+                        <Route path="/admin/users" element={
+                            <RoleGuard allowedRoles={['admin']}>
+                                <AdminScreen />
+                            </RoleGuard>
+                        } />
                     </Route>
 
                     {/* Fallback */}

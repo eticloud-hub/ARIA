@@ -10,7 +10,6 @@ import { useAuthStore } from '../stores/authStore';
  */
 export const MFAScreen: React.FC = () => {
     const navigate = useNavigate();
-    const { setAccessToken, setRequiresMfa } = useAuthStore();
     const [code, setCode] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);

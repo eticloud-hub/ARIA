@@ -1,4 +1,7 @@
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { FolderOpen, Activity, FileCheck, AlertTriangle, Search, Plus } from 'lucide-react';
 import { StatusBadge } from '../components/atoms/StatusBadge';
 import { useAuthStore } from '../stores/authStore';
 import type { CaseDto } from '../lib/adapters';
@@ -86,8 +89,8 @@ export const DashboardScreen: React.FC = () => {
                         key={tab.id}
                         onClick={() => setFilter(tab.id as any)}
                         className={`pb-3 text-sm font-medium border-b-2 transition-colors ${filter === tab.id
-                                ? 'border-navy-600 text-navy-600'
-                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                            ? 'border-navy-600 text-navy-600'
+                            : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                             }`}
                     >
                         {tab.label}

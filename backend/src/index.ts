@@ -1,13 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import cookieParser from 'cookie-parser';
 import { logger } from './utils/logger';
 import { requestLogger } from './middleware/requestLogger';
 import http from 'http';
 
 import { getConfig } from './config';
-import { shutdownPool } from './db/pool';
+import { shutdownPool, testDbConnection } from './db/pool';
 import { runMigrations } from './db/migrate';
 import { errorHandler } from './middleware/errorHandler';
 import { createContainer } from './container';
@@ -53,7 +52,6 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '10mb' }));
-app.use(cookieParser());
 app.use(requestLogger);
 
 // ============================================================================
@@ -65,6 +63,13 @@ app.get('/api/v1/health', (_req, res) => {
         version: '1.0.0',
         timestamp: new Date().toISOString(),
         environment: config.NODE_ENV,
+    });
+});
+
+app.get('/api/v1/config', (_req, res) => {
+    res.json({
+        supabaseUrl: config.SUPABASE_URL,
+        supabaseAnonKey: config.SUPABASE_ANON_KEY,
     });
 });
 
@@ -92,7 +97,17 @@ const server = http.createServer(app);
 
 // Guarantee DB is migrated before accepting any HTTP traffic
 runMigrations()
-    .then(() => {
+    .then(async () => {
+        await testDbConnection();
+    })
+    .catch((err) => {
+        if (config.NODE_ENV === 'production') {
+            logger.fatal({ err }, 'Failed to apply migrations at startup. Exiting.');
+            process.exit(1);
+        }
+        logger.warn({ err }, 'Migration failed — continuing in development mode without migrations.');
+    })
+    .finally(() => {
         server.listen(PORT, () => {
             logger.info(
                 { port: PORT, env: config.NODE_ENV, dbPoolSize: config.DB_POOL_SIZE },
@@ -102,10 +117,6 @@ runMigrations()
             // Start Transactional Outbox poller
             container.outboxService.start(2000);
         });
-    })
-    .catch((err) => {
-        logger.fatal({ err }, 'Failed to apply migrations at startup. Exiting.');
-        process.exit(1);
     });
 
 // ============================================================================

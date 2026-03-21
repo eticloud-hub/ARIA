@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireWriteAccess } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { emitAuditEvent } from '../../middleware/audit';
+import { aiRateLimiter } from '../../middleware/rateLimiter';
 import { startAnalysisSchema } from './analysis.schemas';
 import { sendSuccess, sendCreated } from '../../shared/envelope';
 import { param } from '../../shared/params';
@@ -17,6 +18,7 @@ export function createAnalysisRouter(container: Container): Router {
     router.post(
         '/start',
         requireWriteAccess,
+        aiRateLimiter,
         validate({ body: startAnalysisSchema }),
         async (req: Request, res: Response) => {
             const job = await analysisService.startAnalysis(

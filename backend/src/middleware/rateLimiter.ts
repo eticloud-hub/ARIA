@@ -156,3 +156,11 @@ export const apiRateLimiter = rateLimiter({
     max: 200,
     keyPrefix: 'api',
 });
+
+// Strict rate limiter for external AI model interactions
+// Prevents billing abuse (e.g., max 10 requests per hour per user)
+export const aiRateLimiter = rateLimiter({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 10,
+    keyPrefix: 'ai_model',
+});

@@ -23,6 +23,7 @@ export async function runMigrations(): Promise<void> {
     // We use a single Client, not a Pool, for migrations
     const client = new Client({
         connectionString: dbUrl,
+        ssl: { rejectUnauthorized: false }, // Enforced by Supabase
     });
 
     try {

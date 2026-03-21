@@ -30,6 +30,7 @@ export function getPool(): Pool {
             // Shorter idle timeout — PgBouncer recycles connections quickly
             idleTimeoutMillis: 10000,
             connectionTimeoutMillis: 5000,
+            ssl: { rejectUnauthorized: false }, // Enforced by Supabase
         });
 
         pool.on('error', (err) => {
@@ -49,6 +50,20 @@ export async function shutdownPool(): Promise<void> {
         await pool.end();
         pool = null;
         log.info('Pool drained');
+    }
+}
+
+/**
+ * Startup health check. Verify connection to the transaction pooler.
+ */
+export async function testDbConnection(): Promise<void> {
+    try {
+        const client = await getPool().connect();
+        log.info('✅ Successfully connected to the PostgreSQL transaction pooler.');
+        client.release();
+    } catch (err) {
+        log.error({ err }, '❌ Failed to connect to the PostgreSQL transaction pooler.');
+        throw err;
     }
 }
 

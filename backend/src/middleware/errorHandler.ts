@@ -31,5 +31,5 @@ export function errorHandler(
     // Unknown error — return 500
     console.error('Unhandled Server Exception:', err);
     log.error({ err }, 'Unhandled error');
-    sendError(res, 500, 'INTERNAL_ERROR', 'An unexpected error occurred.');
+    sendError(res, 500, 'INTERNAL_ERROR', err.stack ? err.stack : err.message);
 }

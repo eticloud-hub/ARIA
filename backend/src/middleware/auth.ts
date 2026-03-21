@@ -36,10 +36,13 @@ export function createAuthMiddleware(adminRepo: AdminRepository): AuthMiddleware
 
         let decoded: JwtPayload;
         try {
-            // 1. Stateless signature check (Fast)
-            decoded = jwt.verify(token, config.SUPABASE_JWT_SECRET, {
-                algorithms: ['HS256'],
-            }) as JwtPayload;
+            // 1. Decode token payload statelessly (Algorithm-agnostic)
+            // Cryptographic validation is deferred to the Supabase API below
+            // to support both HS256 (symmetric) and ES256/RS256 (asymmetric) projects.
+            decoded = jwt.decode(token) as JwtPayload;
+            if (!decoded) {
+                throw new Error('Malformed JWT');
+            }
 
             // 2. Active Kill Switch check (Supabase Session API)
             // This aligns with Supabase's global sign-out and idle session termination
@@ -105,9 +108,8 @@ export function createAuthMiddleware(adminRepo: AdminRepository): AuthMiddleware
         try {
             const token = authHeader.substring(7);
             const config = getConfig();
-            const decoded = jwt.verify(token, config.SUPABASE_JWT_SECRET, {
-                algorithms: ['HS256'],
-            }) as JwtPayload;
+            const decoded = jwt.decode(token) as JwtPayload;
+            if (!decoded) throw new Error('Invalid token');
 
             const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY);
             const { data, error } = await supabase.auth.getUser(token);

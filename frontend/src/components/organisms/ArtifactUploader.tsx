@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import Uppy from '@uppy/core';
 import AwsS3 from '@uppy/aws-s3';
-import { Dashboard } from '@uppy/react';
-import '@uppy/core/dist/style.min.css';
-import '@uppy/dashboard/dist/style.min.css';
+import Dashboard from '@uppy/react/dashboard';
+import '@uppy/core/css/style.css';
+import '@uppy/dashboard/css/style.css';
 import api from '../../lib/api';
 import { useUiStore } from '../../stores/uiStore';
 
@@ -27,6 +27,7 @@ export const ArtifactUploader: React.FC<ArtifactUploaderProps> = ({ caseId, onUp
     useEffect(() => {
         // Configure Uppy specifically to ask our backend for presigned URLs.
         uppy.use(AwsS3, {
+            shouldUseMultipart: false, // Use simple upload instead of multipart
             // Because Uppy expects specific JSON structures, we intercept it with `getUploadParameters`
             getUploadParameters: async (file) => {
                 try {
@@ -60,6 +61,7 @@ export const ArtifactUploader: React.FC<ArtifactUploaderProps> = ({ caseId, onUp
         });
 
         uppy.on('upload-success', async (file) => {
+            if (!file) return;
             // After successful upload to S3, hook back to our API to transition status to valid
             try {
                 const artifactId = file.meta.artifactId;
@@ -71,7 +73,7 @@ export const ArtifactUploader: React.FC<ArtifactUploaderProps> = ({ caseId, onUp
         });
 
         uppy.on('complete', (result) => {
-            if (result.successful.length > 0) {
+            if (result && result.successful && result.successful.length > 0) {
                 addToast({ type: 'success', title: 'Upload Complete', message: `Successfully uploaded ${result.successful.length} artifacts.` });
                 onUploadSuccess();
                 onClose();
@@ -79,7 +81,7 @@ export const ArtifactUploader: React.FC<ArtifactUploaderProps> = ({ caseId, onUp
         });
 
         return () => {
-            uppy.close();
+            uppy.destroy();
         };
     }, [uppy, caseId, onUploadSuccess, onClose, addToast]);
 
@@ -99,11 +101,8 @@ export const ArtifactUploader: React.FC<ArtifactUploaderProps> = ({ caseId, onUp
                 <div className="p-6">
                     <Dashboard
                         uppy={uppy}
-                        inline={true}
                         width="100%"
                         height={400}
-                        showProgressDetails={true}
-                        proudlyDisplayPoweredByUppy={false}
                         note="Data will be directly streamed via cryptographic presigned URLs."
                     />
                 </div>

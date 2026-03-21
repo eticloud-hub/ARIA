@@ -1,14 +1,15 @@
 import { z } from 'zod';
+import { sanitizeHtml } from '../../utils/sanitize';
 
 export const createCaseSchema = z.object({
-    title: z.string().min(1).max(200),
-    description: z.string().max(2000).optional(),
+    title: z.string().min(1).max(200).transform(sanitizeHtml),
+    description: z.string().max(2000).optional().transform(v => v ? sanitizeHtml(v) : v),
     metadata: z.record(z.unknown()).optional(),
 });
 
 export const updateCaseSchema = z.object({
-    title: z.string().min(1).max(200).optional(),
-    description: z.string().max(2000).optional(),
+    title: z.string().min(1).max(200).optional().transform(v => v ? sanitizeHtml(v) : v),
+    description: z.string().max(2000).optional().transform(v => v ? sanitizeHtml(v) : v),
     metadata: z.record(z.unknown()).optional(),
 });
 

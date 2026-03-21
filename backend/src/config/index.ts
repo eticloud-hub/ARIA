@@ -1,3 +1,10 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Resolve .env relative to this file's location (backend/src/config → backend/.env)
+// This ensures it works regardless of process.cwd() (important for monorepo workspace scripts)
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
 import { z } from 'zod';
 
 const envSchema = z.object({
@@ -17,6 +24,7 @@ const envSchema = z.object({
     // Supabase
     SUPABASE_URL: z.string().url().default('http://localhost:54321'),
     SUPABASE_ANON_KEY: z.string().min(1).default('ey...'),
+    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).default('ey...'),
     SUPABASE_JWT_SECRET: z.string().min(32).default('super-secret-supabase-jwt-key-that-is-at-least-32-chars!'),
 
     // S3

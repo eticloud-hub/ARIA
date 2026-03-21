@@ -11,7 +11,7 @@ export class RedisCacheAdapter implements CachePort {
     constructor() {
         const config = getConfig();
         // Use a dedicated cache URL if available, fallback to the queue one
-        this.client = new Redis(config.REDIS_QUEUE_URL, {
+        this.client = new Redis(config.REDIS_CACHE_URL || config.REDIS_QUEUE_URL, {
             maxRetriesPerRequest: 1, // Fall open quickly circuit breaker
             showFriendlyErrorStack: true,
         });

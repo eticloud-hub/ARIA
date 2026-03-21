@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../stores/authStore';
 
 /**
  * LoginScreen — S-01
@@ -10,7 +11,6 @@ import { supabase } from '../lib/supabase';
  */
 export const LoginScreen: React.FC = () => {
     const navigate = useNavigate();
-    const { setAccessToken, setUser, setRequiresMfa } = useAuthStore();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -23,7 +23,7 @@ export const LoginScreen: React.FC = () => {
         setLoading(true);
 
         try {
-            const { error: signInError } = await supabase.auth.signInWithPassword({
+            const { data, error: signInError } = await supabase.auth.signInWithPassword({
                 email,
                 password,
             });
@@ -31,6 +31,12 @@ export const LoginScreen: React.FC = () => {
             if (signInError) {
                 setError(signInError.message);
             } else {
+                // Seed the auth store with the session BEFORE navigating.
+                // onAuthStateChange fires asynchronously and may not have updated
+                // the store by the time ProtectedLayout renders.
+                if (data.session) {
+                    useAuthStore.getState().setSession(data.session);
+                }
                 navigate('/');
             }
         } catch {

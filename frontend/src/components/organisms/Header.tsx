@@ -25,8 +25,8 @@ export const Header: React.FC = () => {
                         <User className="w-4 h-4 text-navy-600" />
                     </div>
                     <div>
-                        <p className="font-medium text-slate-700">{user?.fullName}</p>
-                        <p className="text-xs text-slate-400 capitalize">{user?.role}</p>
+                        <p className="font-medium text-slate-700">{user?.user_metadata?.full_name || user?.email}</p>
+                        <p className="text-xs text-slate-400 capitalize">{user?.user_metadata?.role}</p>
                     </div>
                 </div>
                 <button

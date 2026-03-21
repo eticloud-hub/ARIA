@@ -10,7 +10,7 @@ export class AdminRepository extends BaseRepository {
 
     async listUsers(organisationId: string): Promise<SafeUser[]> {
         const { rows } = await this.query<SafeUser>(
-            `SELECT id, organisation_id, email, full_name, role, is_active, mfa_enabled, token_version, last_login_at, created_at, updated_at
+            `SELECT id, organisation_id, email, full_name, role, is_active, last_login_at, created_at, updated_at
              FROM users WHERE organisation_id = $1 ORDER BY created_at DESC`,
             [organisationId]
         );
@@ -27,7 +27,7 @@ export class AdminRepository extends BaseRepository {
 
     async getUserById(id: string): Promise<SafeUser | null> {
         const { rows } = await this.query<SafeUser>(
-            `SELECT id, organisation_id, email, full_name, role, is_active, mfa_enabled, last_login_at, created_at, updated_at
+            `SELECT id, organisation_id, email, full_name, role, is_active, last_login_at, created_at, updated_at
              FROM users WHERE id = $1`,
             [id]
         );
@@ -43,10 +43,10 @@ export class AdminRepository extends BaseRepository {
         role: UserRole
     ): Promise<SafeUser> {
         const { rows } = await this.query<SafeUser>(
-            `INSERT INTO users (id, organisation_id, email, password_hash, full_name, role)
-             VALUES ($1, $2, $3, $4, $5, $6)
-             RETURNING id, organisation_id, email, full_name, role, is_active, mfa_enabled, token_version, last_login_at, created_at, updated_at`,
-            [id, organisationId, email.toLowerCase(), passwordHash, fullName, role]
+            `INSERT INTO users (id, organisation_id, email, full_name, role)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id, organisation_id, email, full_name, role, is_active, last_login_at, created_at, updated_at`,
+            [id, organisationId, email.toLowerCase(), fullName, role]
         );
         return rows[0]!;
     }
@@ -62,7 +62,7 @@ export class AdminRepository extends BaseRepository {
                 is_active = COALESCE($2, is_active),
                 full_name = COALESCE($3, full_name)
              WHERE id = $4 AND organisation_id = $5
-             RETURNING id, organisation_id, email, full_name, role, is_active, mfa_enabled, token_version, last_login_at, created_at, updated_at`,
+             RETURNING id, organisation_id, email, full_name, role, is_active, last_login_at, created_at, updated_at`,
             [data.role || null, data.isActive ?? null, data.fullName || null, userId, organisationId]
         );
         return rows[0] ?? null;

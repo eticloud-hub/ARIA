@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireWriteAccess } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { emitAuditEvent } from '../../middleware/audit';
+import { aiRateLimiter } from '../../middleware/rateLimiter';
 import { generateReportSchema } from './reports.schemas';
 import { sendSuccess, sendCreated } from '../../shared/envelope';
 import { param } from '../../shared/params';
@@ -17,6 +18,7 @@ export function createReportsRouter(container: Container): Router {
     router.post(
         '/',
         requireWriteAccess,
+        aiRateLimiter,
         validate({ body: generateReportSchema }),
         async (req: Request, res: Response) => {
             const report = await reportsService.generate(

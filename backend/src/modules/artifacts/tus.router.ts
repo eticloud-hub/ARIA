@@ -42,9 +42,18 @@ export function createTusRouter(container: Container): Router {
             return `upload-${Date.now()}-${Math.random().toString(36).substring(7)}`;
         },
         async onUploadCreate(req, upload) {
-            // Validate user session manually if required, or let express middleware handle it
-            // before forwarding to tusServer.
-            logger.info({ metadata: upload.metadata }, 'Tus upload initiated');
+            // Strict server-side validation for maximum file sizes (10GB) and formats
+            const size = upload.size ? Number(upload.size) : 0;
+            if (size > 10 * 1024 * 1024 * 1024) {
+                throw { status_code: 413, body: 'File size exceeds 10GB limit' };
+            }
+
+            const format = upload.metadata?.file_format;
+            if (!['evtx', 'pcap', 'csv', 'json'].includes(format || '')) {
+                throw { status_code: 415, body: 'Unsupported file format' };
+            }
+
+            logger.info({ metadata: upload.metadata, size: upload.size }, 'Tus upload initiated and passed boundary checks');
             return {};
         },
         async onUploadFinish(req, upload) {
@@ -112,7 +121,7 @@ export function createTusRouter(container: Container): Router {
     });
 
     // Express middleware to mount the tus server
-    router.all('*', (req, res, next) => {
+    router.use('/', (req, res, next) => {
         // Authenticate the user manually here since Tus server consumes the request
         // Ensure authentication happens before delegating to tusServer
         container.authMiddleware.authenticate(req, res, (err) => {

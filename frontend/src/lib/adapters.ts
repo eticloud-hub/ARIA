@@ -1,117 +1,72 @@
+import { z } from 'zod';
+
 /**
  * Anti-Corruption Layer — Data Adapters
  * Per TRD §03: UI components never access API types directly.
- * These adapters transform API responses into UI-safe DTOs.
+ * These adapters transform API responses into UI-safe DTOs using strict Zod parsing.
  */
 
-// --- API Types (what comes from the server) ---
-interface ApiCase {
-    id: string;
-    reference_id: string;
-    title: string;
-    description: string | null;
-    status: string;
-    created_by: string;
-    organisation_id: string;
-    metadata: Record<string, unknown> | null;
-    created_at: string;
-    updated_at: string;
-    completed_at: string | null;
-}
+// --- Zod Boundary Schemas ---
+export const CaseDtoSchema = z.object({
+    id: z.string().uuid(),
+    referenceId: z.string(),
+    title: z.string(),
+    description: z.string(),
+    status: z.enum(['draft', 'ingesting', 'queued', 'analysing', 'complete', 'error']),
+    createdAt: z.coerce.date(),
+    updatedAt: z.coerce.date(),
+    completedAt: z.coerce.date().nullable(),
+});
 
-interface ApiArtifact {
-    id: string;
-    case_id: string;
-    filename: string;
-    s3_key: string;
-    file_format: string;
-    file_size_bytes: number;
-    sha256_hash: string;
-    ingest_status: string;
-    ingest_error: string | null;
-    uploaded_by: string;
-    uploaded_at: string;
-}
+export const ArtifactDtoSchema = z.object({
+    id: z.string().uuid(),
+    caseId: z.string().uuid(),
+    filename: z.string(),
+    format: z.string(),
+    sizeBytes: z.number(),
+    hash: z.string(),
+    status: z.enum(['pending', 'uploading', 'valid', 'error']),
+    error: z.string().nullable(),
+    uploadedAt: z.coerce.date(),
+});
 
-interface ApiAnalysisResult {
-    id: string;
-    job_id: string;
-    case_id: string;
-    human_attribution_score: number;
-    confidence_interval_low: number;
-    confidence_interval_high: number;
-    mimicry_flag: boolean;
-    dimension_scores: Array<{
-        dimension: string;
-        score: number;
-        confidence: number;
-        evidence: Array<{
-            type: string;
-            severity: string;
-            timestamp_offset_ms: number;
-            description: string;
-        }>;
-    }>;
-    insufficient_data_dimensions: string[];
-    agent_profile_notes: string | null;
-    executive_summary: string | null;
-    created_at: string;
-}
+export const EvidenceDtoSchema = z.object({
+    type: z.string(),
+    severity: z.string(),
+    timestampOffsetMs: z.number(),
+    description: z.string(),
+});
 
-// --- UI DTOs (what components consume) ---
-export interface CaseDto {
-    id: string;
-    referenceId: string;
-    title: string;
-    description: string;
-    status: 'draft' | 'ingesting' | 'queued' | 'analysing' | 'complete' | 'error';
-    createdAt: Date;
-    updatedAt: Date;
-    completedAt: Date | null;
-}
+export const DimensionDtoSchema = z.object({
+    name: z.string(),
+    displayName: z.string(),
+    score: z.number(),
+    confidence: z.number(),
+    evidenceCount: z.number(),
+    evidence: z.array(EvidenceDtoSchema),
+});
 
-export interface ArtifactDto {
-    id: string;
-    caseId: string;
-    filename: string;
-    format: string;
-    sizeBytes: number;
-    hash: string;
-    status: 'pending' | 'uploading' | 'valid' | 'error';
-    error: string | null;
-    uploadedAt: Date;
-}
+export const AnalysisResultDtoSchema = z.object({
+    id: z.string().uuid(),
+    jobId: z.string().uuid(),
+    caseId: z.string().uuid(),
+    score: z.number(),
+    confidenceLow: z.number(),
+    confidenceHigh: z.number(),
+    mimicryFlag: z.boolean(),
+    dimensions: z.array(DimensionDtoSchema),
+    insufficientDimensions: z.array(z.string()),
+    agentProfileNotes: z.string().nullable(),
+    executiveSummary: z.string().nullable(),
+    createdAt: z.coerce.date(),
+});
 
-export interface AnalysisResultDto {
-    id: string;
-    jobId: string;
-    caseId: string;
-    score: number;
-    confidenceLow: number;
-    confidenceHigh: number;
-    mimicryFlag: boolean;
-    dimensions: DimensionDto[];
-    insufficientDimensions: string[];
-    agentProfileNotes: string | null;
-    executiveSummary: string | null;
-    createdAt: Date;
-}
-
-export interface EvidenceDto {
-    type: string;
-    severity: string;
-    timestampOffsetMs: number;
-    description: string;
-}
-
-export interface DimensionDto {
-    name: string;
-    displayName: string;
-    score: number;
-    confidence: number;
-    evidenceCount: number;
-    evidence: EvidenceDto[];
-}
+// --- Inferred Types ---
+export type CaseDto = z.infer<typeof CaseDtoSchema>;
+export type ArtifactDto = z.infer<typeof ArtifactDtoSchema>;
+export type AnalysisResultDto = z.infer<typeof AnalysisResultDtoSchema>;
+export type EvidenceDto = z.infer<typeof EvidenceDtoSchema>;
+export type DimensionDto = z.infer<typeof DimensionDtoSchema>;
 
 // --- Adapters ---
 const DIMENSION_DISPLAY_NAMES: Record<string, string> = {
@@ -122,35 +77,35 @@ const DIMENSION_DISPLAY_NAMES: Record<string, string> = {
     cognitive_bias: 'Cognitive Bias Markers',
 };
 
-export function adaptCase(api: ApiCase): CaseDto {
-    return {
+export function adaptCase(api: any): CaseDto {
+    return CaseDtoSchema.parse({
         id: api.id,
         referenceId: api.reference_id,
         title: api.title,
         description: api.description || '',
-        status: api.status as CaseDto['status'],
-        createdAt: new Date(api.created_at),
-        updatedAt: new Date(api.updated_at),
-        completedAt: api.completed_at ? new Date(api.completed_at) : null,
-    };
+        status: api.status,
+        createdAt: api.created_at,
+        updatedAt: api.updated_at,
+        completedAt: api.completed_at || null,
+    });
 }
 
-export function adaptArtifact(api: ApiArtifact): ArtifactDto {
-    return {
+export function adaptArtifact(api: any): ArtifactDto {
+    return ArtifactDtoSchema.parse({
         id: api.id,
         caseId: api.case_id,
         filename: api.filename,
         format: api.file_format,
         sizeBytes: api.file_size_bytes,
         hash: api.sha256_hash,
-        status: api.ingest_status as ArtifactDto['status'],
+        status: api.ingest_status,
         error: api.ingest_error,
-        uploadedAt: new Date(api.uploaded_at),
-    };
+        uploadedAt: api.uploaded_at,
+    });
 }
 
-export function adaptAnalysisResult(api: ApiAnalysisResult): AnalysisResultDto {
-    return {
+export function adaptAnalysisResult(api: any): AnalysisResultDto {
+    return AnalysisResultDtoSchema.parse({
         id: api.id,
         jobId: api.job_id,
         caseId: api.case_id,
@@ -158,13 +113,13 @@ export function adaptAnalysisResult(api: ApiAnalysisResult): AnalysisResultDto {
         confidenceLow: api.confidence_interval_low,
         confidenceHigh: api.confidence_interval_high,
         mimicryFlag: api.mimicry_flag,
-        dimensions: api.dimension_scores.map((d) => ({
+        dimensions: api.dimension_scores.map((d: any) => ({
             name: d.dimension,
             displayName: DIMENSION_DISPLAY_NAMES[d.dimension] || d.dimension,
             score: d.score,
             confidence: d.confidence,
-            evidenceCount: d.evidence.length,
-            evidence: d.evidence.map((e) => ({
+            evidenceCount: d.evidence?.length || 0,
+            evidence: (d.evidence || []).map((e: any) => ({
                 type: e.type,
                 severity: e.severity,
                 timestampOffsetMs: e.timestamp_offset_ms,
@@ -174,6 +129,6 @@ export function adaptAnalysisResult(api: ApiAnalysisResult): AnalysisResultDto {
         insufficientDimensions: api.insufficient_data_dimensions,
         agentProfileNotes: api.agent_profile_notes,
         executiveSummary: api.executive_summary,
-        createdAt: new Date(api.created_at),
-    };
+        createdAt: api.created_at,
+    });
 }
